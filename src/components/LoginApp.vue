@@ -21,14 +21,13 @@
     </template>
     <script setup>
     import { ref } from 'vue'
-    import { useAuthStore } from '../stores/auth'
 
     const loginUsername = ref('')
     const loginPassword = ref('')
     const username = ref('')
     const email = ref('')
     const password = ref('')
-    const auth = useAuthStore()
+    const emit = defineEmits(['login'])
 
   async function sendRegistration(details) {
     const response = await fetch('/accounts/register', {
@@ -55,7 +54,7 @@
       throw new Error('password not set')
     }
     localStorage.setItem('userToken', data.token)
-    auth.token = data.token
+    emit('login', data.token)
   }
 
 

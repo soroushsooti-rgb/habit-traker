@@ -1,7 +1,7 @@
 <template>
     <button @click="logout" id="logout_button" type="button">Logout</button>
 
-    <form id="habit-form" class="Habit">
+    <form @submit.prevent="postform" id="habit-form" class="Habit">
         <input v-model="habitname" id="habit-name" name="name" type="text" placeholder="Habit name" required>
         <div>
             <div class="freq">
@@ -41,42 +41,190 @@
                 </label>
             </div>
         </div>
-        <button @click="postform" id="create_habit_button" type="submit">Create habit</button>
+        <button id="create_habit_button" type="submit">Create habit</button>
     </form>
 
     <div class="check">
-        <h1>My Habits</h1>
-        <ul id="habit-list"></ul>
+    <ul id="habit-list">
+        <li v-for="habit in habits" :key="habit.id">
+        <input
+        type="checkbox"
+        :checked="Boolean(findCheck(habit.id))"
+        @change="toggleCheck(habit.id, $event)"
+        >
+
+        {{ habit.name }}
+
+        <button type="button" @click="deletehabit(habit.id)">
+        Delete
+        </button>
+        </li>
+    </ul>
     </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useAuthStore } from '../stores/auth';
+import { ref, onMounted } from 'vue'
 
+const checks = ref([])
 const habitname = ref ('')
 const habitreminder = ref('');
 const habitdayweek = ref('5');
-const day_of_month = ref('day_of_month')
+const day_of_month = ref('')
 const mood = ref('DAILY');
-const auth = useAuthStore();
+const props = defineProps({ token: { type: String, required: true } });
+const emit = defineEmits(['logout']);
+const habits = ref([])
+
 
   async function sendLogout() {
     const response = await fetch('/accounts/logout', {
       method: 'POST',
-      headers: { Authorization: `Token ${auth.token}` },
+      headers: { Authorization: `Token ${props.token}` },
     })
     if (!response.ok && response.status !== 401) {
       throw new Error('خروج انجام نشد. دوباره تلاش کنید.')
     }
     localStorage.removeItem('userToken')
-    auth.token = ''
+    emit('logout')
   }
-
-
 const logout = async () => {
   await sendLogout();
 };
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//showhabit
+async function gethabit() {
+  const response = await fetch('/habit/habits/', {
+    method: 'GET',
+    headers: {
+      Authorization: `Token ${props.token}`,
+    },
+  })
+
+  if (!response.ok) {
+    alert('دریافت عادت‌ها ناموفق بود')
+    return
+  }
+
+  const data = await response.json()
+  habits.value = data
+}
+onMounted(gethabit)
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//deletehabit
+async function deletehabit(id) {
+  const response = await fetch(`/habit/habits/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Token ${props.token}`,
+    },
+  })
+
+  if (!response.ok) {
+    alert('حذف عادت ناموفق بود')
+    return
+  }
+
+  await gethabit()
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//GET checks-habit
+async function getchecks() {
+  const response = await fetch('/habit/checks/', {
+    headers: {
+      Authorization: `Token ${props.token}`,
+    },
+  })
+
+  if (!response.ok) {
+    alert('دریافت وضعیت عادت‌ها ناموفق بود')
+    return
+  }
+
+  checks.value = await response.json()
+}
+
+onMounted(getchecks)
+
+function findCheck(habitId) {
+  return checks.value.find(check => check.habit === habitId)
+}
+async function toggleCheck(habitId, event) {
+  const checkbox = event.target
+  const existingCheck = findCheck(habitId)
+
+  const url = existingCheck
+    ? `/habit/checks/${existingCheck.id}`
+    : '/habit/checks/'
+
+  const response = await fetch(url, {
+    method: existingCheck ? 'DELETE' : 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${props.token}`,
+    },
+    body: existingCheck
+      ? undefined
+      : JSON.stringify({ habit: habitId }),
+  })
+
+  if (!response.ok) {
+    checkbox.checked = Boolean(existingCheck)
+    alert('تغییر وضعیت ناموفق بود')
+    return
+  }
+
+  await getchecks()
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// create habit
+async function postform() {
+  const name = habitname.value.trim()
+  if (!name) {
+    alert('نام عادت را وارد کنید')
+    return
+  }
+
+  const details = { name, frequency: mood.value }
+
+  if (mood.value === 'DAILY') {
+    if (!habitreminder.value) {
+      alert('زمان یادآوری را وارد کنید')
+      return
+    }
+    details.reminder_time = habitreminder.value
+  } else if (mood.value === 'WEEKLY') {
+    details.day_of_week = Number(habitdayweek.value)
+  } else if (mood.value === 'MONTHLY') {
+    const day = Number(day_of_month.value)
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      alert('روز ماه باید عددی بین ۱ تا ۳۱ باشد')
+      return
+    }
+    details.day_of_month = day
+  }
+
+  const response = await fetch('/habit/habits/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Token ${props.token}`,
+    },
+    body: JSON.stringify(details),
+  })
+
+  if (!response.ok) {
+    alert('ساخت عادت ناموفق بود')
+    return
+  }
+
+  habitname.value = ''
+  habitreminder.value = ''
+  habitdayweek.value = '5'
+  day_of_month.value = ''
+  await gethabit()
+}
 
 </script>
 

@@ -1,15 +1,16 @@
 
 <template>
   <main>
-    <HabitView v-if="auth.token" />
-    <AuthView v-else />
+    <HabitView v-if="token" :token="token" @logout="token = ''" />
+    <AuthView v-else @login="token = $event" />
   </main>
 </template>
 
 <script setup>
 import AuthView from "./components/LoginApp.vue";
 import HabitView from "./components/HabitTracker.vue";
-import { useAuthStore } from "./stores/auth";
+import { ref } from "vue";
 
-const auth = useAuthStore();
+const token = ref(localStorage.getItem('userToken') || '')
+
 </script>
