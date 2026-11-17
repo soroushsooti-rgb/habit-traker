@@ -1,26 +1,15 @@
+
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <main>
+    <HabitView v-if="auth.token" />
+    <AuthView v-else />
+  </main>
 </template>
 
-<script>
-import HelloWorld from './components/HelloWorld.vue'
+<script setup>
+import AuthView from "./components/LoginApp.vue";
+import HabitView from "./components/HabitTracker.vue";
+import { useAuthStore } from "./stores/auth";
 
-export default {
-  name: 'App',
-  components: {
-    HelloWorld
-  }
-}
+const auth = useAuthStore();
 </script>
-
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
-</style>
