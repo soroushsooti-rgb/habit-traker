@@ -4,11 +4,11 @@ module.exports = defineConfig({
   devServer: {
     proxy: {
       '/habit': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://[::1]:8000',
         changeOrigin: true,
       },
       '/accounts': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://[::1]:8000',
         changeOrigin: true,
       },
     },

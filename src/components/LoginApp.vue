@@ -5,7 +5,8 @@
                         <h3>Login</h3>
                         <input v-model="loginUsername" id="user" type="text" placeholder="username">
                         <input v-model="loginPassword" id="password" type="password" placeholder="password">
-                        <button @click="login" id="login_button" class="login_button">login</button>
+                        <button @click="login" id="login_button" class="login_button" :disabled="loginPending">login</button>
+                        <p v-if="loginError" role="alert">{{ loginError }}</p>
 
                     </div>
 
@@ -24,6 +25,8 @@
 
     const loginUsername = ref('')
     const loginPassword = ref('')
+    const loginPending = ref(false)
+    const loginError = ref('')
     const username = ref('')
     const email = ref('')
     const password = ref('')
@@ -36,10 +39,7 @@
       body: JSON.stringify(details),
     })
     const data = await response.json()
-    if (!response.ok) {
-      const message = Object.entries(data).map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`).join('\n')
-      throw new Error(message || 'Registration failed.')
-    }
+    if (!response.ok)
     return data
   }
 
@@ -49,9 +49,18 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(details),
     })
-    const data = await response.json()
-    if (!response.ok || !data.token) {
-      throw new Error('password not set')
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('مسیر ورود در سرور پیدا نشد.')
+      }
+      if (response.status >= 500) {
+        throw new Error('سرور هنگام ورود خطا داد. دوباره تلاش کنید.')
+      }
+      throw new Error('ورود ناموفق بود. نام کاربری و رمز را بررسی کنید.')
+    }
+    const data = await response.json().catch(() => null)
+    if (!data?.token) {
+      throw new Error('سرور توکن ورود ارسال نکرد.')
     }
     localStorage.setItem('userToken', data.token)
     emit('login', data.token)
@@ -66,7 +75,18 @@
         password.value = ''
     }
     async function login() {
-        await sendLogin({ username: loginUsername.value, password: loginPassword.value })
+        if (loginPending.value) return
+        loginPending.value = true
+        loginError.value = ''
+        try {
+            await sendLogin({ username: loginUsername.value, password: loginPassword.value })
+        } catch (error) {
+            loginError.value = error instanceof TypeError
+                ? 'ارتباط با سرور برقرار نشد.'
+                : error.message
+        } finally {
+            loginPending.value = false
+        }
     }
     </script>
 
