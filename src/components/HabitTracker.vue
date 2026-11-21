@@ -1,7 +1,8 @@
 <template>
     <button @click="logout" id="logout_button" type="button">Logout</button>
+    <p v-if="logoutError" class="habit-error" role="alert" dir="rtl">{{ logoutError }}</p>
 
-    <form @submit.prevent="postform" id="habit-form" class="Habit">
+    <form @submit.prevent="postform" id="habit-form" class="Habit" novalidate>
         <input v-model="habitname" id="habit-name" name="name" type="text" placeholder="Habit name" required>
         <div>
             <div class="freq">
@@ -12,7 +13,7 @@
                 </select>
             </div>
 
-            <div>
+            <div v-if="mood === 'DAILY'">
                 <label>
                     Reminder:
                     <input v-model="habitreminder" id="habit-reminder" name="reminder_time" type="time">
@@ -42,14 +43,21 @@
             </div>
         </div>
         <button id="create_habit_button" type="submit">Create habit</button>
+        <p v-if="formError" class="habit-error" role="alert" dir="rtl">{{ formError }}</p>
     </form>
 
     <div class="check">
+    <p v-if="habitLoadError" class="habit-error" role="alert" dir="rtl">{{ habitLoadError }}</p>
+    <button v-if="habitLoadError" type="button" @click="gethabit">دریافت دوبارهٔ عادت‌ها</button>
+    <p v-if="checkLoadError" class="habit-error" role="alert" dir="rtl">{{ checkLoadError }}</p>
+    <button v-if="checkLoadError" type="button" @click="getchecks">دریافت دوبارهٔ وضعیت تیک‌ها</button>
+    <p v-if="listError" class="habit-error" role="alert" dir="rtl">{{ listError }}</p>
     <ul id="habit-list">
         <li v-for="habit in habits" :key="habit.id">
         <input
         type="checkbox"
         :checked="Boolean(findCheck(habit.id))"
+        :disabled="!checksReady"
         @change="toggleCheck(habit.id, $event)"
         >
 
@@ -77,64 +85,78 @@ const emit = defineEmits(['logout']);
 const habits = ref([])
 
 
-  async function sendLogout() {
-    const response = await fetch('/accounts/logout', {
-      method: 'POST',
-      headers: { Authorization: `Token ${props.token}` },
-    })
-    if (!response.ok && response.status !== 401) return
+const logoutError = ref('')
+const formError = ref('')
+const habitLoadError = ref('')
+const checkLoadError = ref('')
+const listError = ref('')
+const checksReady = ref(false)
+
+async function request(path, failureMessage, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { Authorization: `Token ${props.token}`, ...options.headers },
+  }).catch(() => null)
+
+  if (!response) throw new Error('ارتباط با سرور برقرار نشد.')
+  if (response.status === 401 && path !== '/accounts/logout') {
+    throw new Error('نشست شما معتبر نیست. دوباره وارد شوید.')
+  }
+  if (!response.ok && !(path === '/accounts/logout' && response.status === 401)) {
+    throw new Error(failureMessage)
+  }
+  return response
+}
+
+async function readList(response) {
+  const data = await response.json().catch(() => null)
+  if (!Array.isArray(data)) throw new Error('پاسخ سرور قابل خواندن نیست.')
+  return data
+}
+
+async function logout() {
+  logoutError.value = ''
+  try {
+    await request('/accounts/logout', 'خروج انجام نشد.', { method: 'POST' })
     localStorage.removeItem('userToken')
     emit('logout')
+  } catch (error) {
+    logoutError.value = error.message || 'خروج انجام نشد.'
   }
-const logout = async () => {
-  await sendLogout();
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//showhabit
+}
+
 async function gethabit() {
-  const response = await fetch('/habit/habits/', {
-    method: 'GET',
-    headers: {
-      Authorization: `Token ${props.token}`,
-    },
-  })
-
-  if (!response.ok) return
-
-  const data = await response.json()
-  habits.value = data
+  habitLoadError.value = ''
+  try {
+    habits.value = await readList(await request('/habit/habits/', 'دریافت فهرست عادت‌ها انجام نشد.'))
+  } catch (error) {
+    habitLoadError.value = error.message
+  }
 }
-onMounted(gethabit)
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//deletehabit
-async function deletehabit(id) {
-  const response = await fetch(`/habit/habits/${id}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Token ${props.token}`,
-    },
-  })
-
-  if (!response.ok) return
-
-  await gethabit()
-}
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//GET checks-habit
 async function getchecks() {
-  const response = await fetch('/habit/checks/', {
-    headers: {
-      Authorization: `Token ${props.token}`,
-    },
-  })
-
-  if (!response.ok) return
-
-  checks.value = await response.json()
+  checkLoadError.value = ''
+  try {
+    checks.value = await readList(await request('/habit/checks/', 'دریافت وضعیت تیک‌ها انجام نشد.'))
+    checksReady.value = true
+  } catch (error) {
+    checksReady.value = false
+    checkLoadError.value = error.message
+  }
 }
 
+onMounted(gethabit)
 onMounted(getchecks)
+
+async function deletehabit(id) {
+  listError.value = ''
+  try {
+    await request(`/habit/habits/${id}`, 'حذف عادت انجام نشد.', { method: 'DELETE' })
+    await gethabit()
+  } catch (error) {
+    listError.value = error.message
+  }
+}
 
 function findCheck(habitId) {
   return checks.value.find(check => check.habit === habitId)
@@ -145,64 +167,65 @@ async function toggleCheck(habitId, event) {
   const existingCheck = findCheck(habitId)
   const url = existingCheck ? `/habit/checks/${existingCheck.id}` : '/habit/checks/'
 
+  listError.value = ''
   try {
-    const response = await fetch(url, {
+    await request(url, 'ذخیرهٔ وضعیت تیک انجام نشد.', {
       method: existingCheck ? 'DELETE' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Token ${props.token}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: existingCheck ? undefined : JSON.stringify({ habit: habitId }),
     })
-
-    if (response.ok) {
-      await getchecks()
-    }
-  } catch {
-    // Keep the last confirmed state when the request fails.
+    await getchecks()
+  } catch (error) {
+    listError.value = error.message
   } finally {
     checkbox.checked = Boolean(findCheck(habitId))
   }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// create habit
 async function postform() {
+  formError.value = ''
   const details = {
     name: habitname.value.trim(),
-    frequency: mood.value
+    frequency: mood.value,
   }
 
-  if (!details.name) return
+  if (!details.name) {
+    formError.value = 'نام عادت را وارد کنید.'
+    return
+  }
 
   if (mood.value === 'DAILY') {
-    if (!habitreminder.value) return
+    if (!habitreminder.value) {
+      formError.value = 'ساعت یادآوری را وارد کنید.'
+      return
+    }
     details.reminder_time = habitreminder.value
   } else if (mood.value === 'WEEKLY') {
     details.day_of_week = Number(habitdayweek.value)
   } else if (mood.value === 'MONTHLY') {
     const day = Number(day_of_month.value)
-    if (!Number.isInteger(day) || day < 1 || day > 31) return
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      formError.value = 'روز ماه باید عددی بین ۱ تا ۳۱ باشد.'
+      return
+    }
     details.day_of_month = day
   }
 
-  const response = await fetch('/habit/habits/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Token ${props.token}`
-    },
-    body: JSON.stringify(details)
-  })
+  try {
+    await request('/habit/habits/', 'ساخت عادت انجام نشد.', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details),
+    })
 
-  if (!response.ok) return
-
-  habitname.value = ''
-  habitreminder.value = ''
-  habitdayweek.value = '5'
-  day_of_month.value = ''
-
-  await gethabit()
+    habitname.value = ''
+    habitreminder.value = ''
+    habitdayweek.value = '5'
+    day_of_month.value = ''
+    await gethabit()
+  } catch (error) {
+    formError.value = error.message
+  }
 }
 
 </script>
@@ -268,5 +291,14 @@ body {
     margin-bottom: 8px;
     border-radius: 6px;
     list-style: none;
+}
+.habit-error {
+    flex-basis: 100%;
+    margin: 8px 0;
+    color: #ffb8b8;
+}
+
+#logout_button + .habit-error {
+    color: #9f2020;
 }
 </style>

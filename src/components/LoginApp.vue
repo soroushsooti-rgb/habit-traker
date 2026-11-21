@@ -6,19 +6,22 @@
                         <input v-model="loginUsername" id="user" type="text" placeholder="username">
                         <input v-model="loginPassword" id="password" type="password" placeholder="password">
                         <button @click="login" id="login_button" class="login_button" :disabled="loginPending">login</button>
+                        <p v-if="loginError" class="auth-error" role="alert" dir="rtl">{{ loginError }}</p>
 
                     </div>
 
                 <div class="register_form">
                     <h3>Registerr</h3>
                         <input v-model="username" id="register_user" class="register_user" type="text" placeholder="username">
-                        <input v-model="email" id="register_email" class="register_email" type="text">
+                        <input v-model="email" id="register_email" class="register_email" type="email">
                         <input v-model="password" id="register_password" type="password"  placeholder=" password">
-                        <button @click="register" id="register_button" class="register_button">register</button>
-                        <p>Username = {{username}}</p>
+                        <button @click="register" id="register_button" class="register_button" :disabled="registerPending">register</button>
+                        <p v-if="registerError" class="auth-error" role="alert" dir="rtl">{{ registerError }}</p>
+                        <p v-if="registerMessage" role="status" dir="rtl">{{ registerMessage }}</p>
+
                 </div>
             </div>
-            <p>Username = {{username}}</p>
+
     </template>
     <script setup>
     import { ref } from 'vue'
@@ -26,47 +29,96 @@
     const loginUsername = ref('')
     const loginPassword = ref('')
     const loginPending = ref(false)
+    const loginError = ref('')
     const username = ref('')
     const email = ref('')
     const password = ref('')
+    const registerPending = ref(false)
+    const registerError = ref('')
+    const registerMessage = ref('')
     const emit = defineEmits(['login'])
 
-  async function sendRegistration(details) {
-    const response = await fetch('/accounts/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(details),
-    })
-    const data = await response.json()
-    if (!response.ok)
-    return data
-  }
+    async function sendRequest(path, details) {
+        const response = await fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(details),
+        }).catch(() => null)
+
+        if (!response) throw new Error('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.')
+        if (response.status === 404) throw new Error('مسیر درخواست روی سرور پیدا نشد.')
+        if (response.status === 429) throw new Error('تعداد درخواست‌ها زیاد است. کمی صبر کنید.')
+        if (response.status >= 500) throw new Error('سرور پاسخ درستی نداد. دوباره تلاش کنید.')
+
+        return response
+    }
 
     async function register() {
-        await sendRegistration({ username: username.value, email: email.value, password: password.value })
-        username.value = ''
-        email.value = ''
-        password.value = ''
+        if (registerPending.value) return
+        registerError.value = ''
+        registerMessage.value = ''
+
+        const details = {
+            username: username.value.trim(),
+            email: email.value.trim(),
+            password: password.value,
+        }
+
+        if (!details.username || !details.email || !details.password) {
+            registerError.value = 'نام کاربری، ایمیل و رمز عبور را وارد کنید.'
+            return
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
+            registerError.value = 'ایمیل را به شکل درست وارد کنید.'
+            return
+        }
+
+        registerPending.value = true
+        try {
+            const response = await sendRequest('/accounts/register', details)
+            if (!response.ok) throw new Error('ثبت‌نام انجام نشد. دوباره تلاش کنید.')
+
+            username.value = ''
+            email.value = ''
+            password.value = ''
+            registerMessage.value = 'ثبت‌نام انجام شد. حالا می‌توانید وارد شوید.'
+        } catch (error) {
+            registerError.value = error.message
+        } finally {
+            registerPending.value = false
+        }
     }
+
     async function login() {
         if (loginPending.value) return
+        loginError.value = ''
+
+        const details = { username: loginUsername.value.trim(), password: loginPassword.value }
+        if (!details.username || !details.password) {
+            loginError.value = 'نام کاربری و رمز عبور را وارد کنید.'
+            return
+        }
+
         loginPending.value = true
         try {
-            const response = await fetch('/accounts/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: loginUsername.value,
-                    password: loginPassword.value,
-                }),
-            }).catch(() => null)
+            const response = await sendRequest('/accounts/login', details)
+            if ([400, 401, 403, 422].includes(response.status)) {
+                throw new Error('ورود پذیرفته نشد. نام کاربری و رمز عبور را بررسی کنید.')
+            }
+            const failedLogin = 'ورود انجام نشد. دوباره تلاش کنید.'
+            if (!response.ok) throw new Error(failedLogin)
 
-            if (!response?.ok) return
             const data = await response.json().catch(() => null)
-            if (!data?.token) return
+            if (typeof data?.token !== 'string' || !data.token.trim()) throw new Error(failedLogin)
 
-            localStorage.setItem('userToken', data.token)
+            try {
+                localStorage.setItem('userToken', data.token)
+            } catch {
+                throw new Error(failedLogin)
+            }
             emit('login', data.token)
+        } catch (error) {
+            loginError.value = error.message
         } finally {
             loginPending.value = false
         }
@@ -91,6 +143,11 @@ body {
     background:#2A1A0E;
 }
 
+
+.Authentication .auth-error {
+    margin: 8px 0;
+    color: #ffb8b8;
+}
 
     </style>
 
