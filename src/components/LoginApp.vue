@@ -42,21 +42,6 @@
     return data
   }
 
-  async function sendLogin(details) {
-    const response = await fetch('/accounts/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(details),
-    }).catch(() => null)
-    if (!response?.ok) return
-    const data = await response.json().catch(() => null)
-    if (!data?.token) return
-    localStorage.setItem('userToken', data.token)
-    emit('login', data.token)
-  }
-
-
-
     async function register() {
         await sendRegistration({ username: username.value, email: email.value, password: password.value })
         username.value = ''
@@ -67,7 +52,21 @@
         if (loginPending.value) return
         loginPending.value = true
         try {
-            await sendLogin({ username: loginUsername.value, password: loginPassword.value })
+            const response = await fetch('/accounts/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: loginUsername.value,
+                    password: loginPassword.value,
+                }),
+            }).catch(() => null)
+
+            if (!response?.ok) return
+            const data = await response.json().catch(() => null)
+            if (!data?.token) return
+
+            localStorage.setItem('userToken', data.token)
+            emit('login', data.token)
         } finally {
             loginPending.value = false
         }
