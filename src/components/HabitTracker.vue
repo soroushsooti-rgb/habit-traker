@@ -83,7 +83,7 @@ const habits = ref([])
       headers: { Authorization: `Token ${props.token}` },
     })
     if (!response.ok && response.status !== 401) {
-      throw new Error('خروج انجام نشد. دوباره تلاش کنید.')
+      return
     }
     localStorage.removeItem('userToken')
     emit('logout')
@@ -102,12 +102,10 @@ async function gethabit() {
   })
 
   if (!response.ok) {
-    alert('دریافت عادت‌ها ناموفق بود')
     return
   }
 
-  const data = await response.json()
-  habits.value = data
+  habits.value = await response.json()
 }
 onMounted(gethabit)
 
@@ -122,7 +120,6 @@ async function deletehabit(id) {
   })
 
   if (!response.ok) {
-    alert('حذف عادت ناموفق بود')
     return
   }
 
@@ -138,7 +135,6 @@ async function getchecks() {
   })
 
   if (!response.ok) {
-    alert('دریافت وضعیت عادت‌ها ناموفق بود')
     return
   }
 
@@ -171,7 +167,6 @@ async function toggleCheck(habitId, event) {
 
   if (!response.ok) {
     checkbox.checked = Boolean(existingCheck)
-    alert('تغییر وضعیت ناموفق بود')
     return
   }
 
@@ -182,7 +177,6 @@ async function toggleCheck(habitId, event) {
 async function postform() {
   const name = habitname.value.trim()
   if (!name) {
-    alert('نام عادت را وارد کنید')
     return
   }
 
@@ -190,7 +184,6 @@ async function postform() {
 
   if (mood.value === 'DAILY') {
     if (!habitreminder.value) {
-      alert('زمان یادآوری را وارد کنید')
       return
     }
     details.reminder_time = habitreminder.value
@@ -199,7 +192,6 @@ async function postform() {
   } else if (mood.value === 'MONTHLY') {
     const day = Number(day_of_month.value)
     if (!Number.isInteger(day) || day < 1 || day > 31) {
-      alert('روز ماه باید عددی بین ۱ تا ۳۱ باشد')
       return
     }
     details.day_of_month = day
@@ -215,7 +207,6 @@ async function postform() {
   })
 
   if (!response.ok) {
-    alert('ساخت عادت ناموفق بود')
     return
   }
 
