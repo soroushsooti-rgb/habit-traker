@@ -82,9 +82,7 @@ const habits = ref([])
       method: 'POST',
       headers: { Authorization: `Token ${props.token}` },
     })
-    if (!response.ok && response.status !== 401) {
-      return
-    }
+    if (!response.ok && response.status !== 401) return
     localStorage.removeItem('userToken')
     emit('logout')
   }
@@ -101,11 +99,10 @@ async function gethabit() {
     },
   })
 
-  if (!response.ok) {
-    return
-  }
+  if (!response.ok) return
 
-  habits.value = await response.json()
+  const data = await response.json()
+  habits.value = data
 }
 onMounted(gethabit)
 
@@ -119,9 +116,7 @@ async function deletehabit(id) {
     },
   })
 
-  if (!response.ok) {
-    return
-  }
+  if (!response.ok) return
 
   await gethabit()
 }
@@ -134,9 +129,7 @@ async function getchecks() {
     },
   })
 
-  if (!response.ok) {
-    return
-  }
+  if (!response.ok) return
 
   checks.value = await response.json()
 }
@@ -146,54 +139,50 @@ onMounted(getchecks)
 function findCheck(habitId) {
   return checks.value.find(check => check.habit === habitId)
 }
+
 async function toggleCheck(habitId, event) {
   const checkbox = event.target
   const existingCheck = findCheck(habitId)
+  const url = existingCheck ? `/habit/checks/${existingCheck.id}` : '/habit/checks/'
 
-  const url = existingCheck
-    ? `/habit/checks/${existingCheck.id}`
-    : '/habit/checks/'
+  try {
+    const response = await fetch(url, {
+      method: existingCheck ? 'DELETE' : 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Token ${props.token}`,
+      },
+      body: existingCheck ? undefined : JSON.stringify({ habit: habitId }),
+    })
 
-  const response = await fetch(url, {
-    method: existingCheck ? 'DELETE' : 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Token ${props.token}`,
-    },
-    body: existingCheck
-      ? undefined
-      : JSON.stringify({ habit: habitId }),
-  })
-
-  if (!response.ok) {
-    checkbox.checked = Boolean(existingCheck)
-    return
+    if (response.ok) {
+      await getchecks()
+    }
+  } catch {
+    // Keep the last confirmed state when the request fails.
+  } finally {
+    checkbox.checked = Boolean(findCheck(habitId))
   }
-
-  await getchecks()
 }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // create habit
 async function postform() {
-  const name = habitname.value.trim()
-  if (!name) {
-    return
+  const details = {
+    name: habitname.value.trim(),
+    frequency: mood.value
   }
 
-  const details = { name, frequency: mood.value }
+  if (!details.name) return
 
   if (mood.value === 'DAILY') {
-    if (!habitreminder.value) {
-      return
-    }
+    if (!habitreminder.value) return
     details.reminder_time = habitreminder.value
   } else if (mood.value === 'WEEKLY') {
     details.day_of_week = Number(habitdayweek.value)
   } else if (mood.value === 'MONTHLY') {
     const day = Number(day_of_month.value)
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      return
-    }
+    if (!Number.isInteger(day) || day < 1 || day > 31) return
     details.day_of_month = day
   }
 
@@ -201,19 +190,18 @@ async function postform() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Token ${props.token}`,
+      Authorization: `Token ${props.token}`
     },
-    body: JSON.stringify(details),
+    body: JSON.stringify(details)
   })
 
-  if (!response.ok) {
-    return
-  }
+  if (!response.ok) return
 
   habitname.value = ''
   habitreminder.value = ''
   habitdayweek.value = '5'
   day_of_month.value = ''
+
   await gethabit()
 }
 
