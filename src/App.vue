@@ -1,16 +1,16 @@
-
 <template>
   <main>
-    <HabitView v-if="token" :token="token" @logout="token = ''" />
-    <AuthView v-else @login="token = $event" />
+    <HabitView v-if="isLoggedIn" />
+    <AuthView v-else />
   </main>
 </template>
 
 <script setup>
-import AuthView from "./components/LoginApp.vue";
-import HabitView from "./components/HabitTracker.vue";
-import { ref } from "vue";
+import { storeToRefs } from 'pinia'
+import AuthView from './components/LoginApp.vue'
+import HabitView from './components/HabitTracker.vue'
+import { useAuthStore } from './stores/auth'
 
-const token = ref(localStorage.getItem('userToken') || '')
-
+const auth = useAuthStore()
+const { isLoggedIn } = storeToRefs(auth)
 </script>

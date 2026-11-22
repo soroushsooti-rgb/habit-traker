@@ -1,153 +1,127 @@
-    <template>
-    <div class="Authentication">
+<template>
+  <div class="auth-forms">
+    <!-- فرم ورود: دریافت نام کاربری و رمز عبور -->
+    <form novalidate @submit.prevent="login">
+      <h3>Login</h3>
+      <input v-model="loginUsername" id="user" type="text" placeholder="username" aria-label="Username" autocomplete="username" required>
+      <input v-model="loginPassword" id="password" type="password" placeholder="password" aria-label="Password" autocomplete="current-password" required>
+      <button id="login_button" type="submit" :disabled="loginPending">Login</button>
+      <p v-if="loginError" class="auth-error" role="alert" dir="rtl">{{ loginError }}</p>
+    </form>
 
-                    <div class="login_form">
-                        <h3>Login</h3>
-                        <input v-model="loginUsername" id="user" type="text" placeholder="username">
-                        <input v-model="loginPassword" id="password" type="password" placeholder="password">
-                        <button @click="login" id="login_button" class="login_button" :disabled="loginPending">login</button>
-                        <p v-if="loginError" class="auth-error" role="alert" dir="rtl">{{ loginError }}</p>
+    <!-- فرم ثبت‌نام: پیام خطا یا موفقیت زیر همین فرم نمایش داده می‌شود. -->
+    <form novalidate @submit.prevent="register">
+      <h3>Register</h3>
+      <input v-model="registerUsername" id="register_user" type="text" placeholder="username" aria-label="Username" autocomplete="username" required>
+      <input v-model="registerEmail" id="register_email" type="email" placeholder="email" aria-label="Email" autocomplete="email" required>
+      <input v-model="registerPassword" id="register_password" type="password" placeholder="password" aria-label="Password" autocomplete="new-password" required>
+      <button id="register_button" type="submit" :disabled="registerPending">Register</button>
+      <p v-if="registerError" class="auth-error" role="alert" dir="rtl">{{ registerError }}</p>
+      <p v-if="registerMessage" role="status" dir="rtl">{{ registerMessage }}</p>
+    </form>
+  </div>
+</template>
 
-                    </div>
+<script setup>
+import { ref } from 'vue'
 
-                <div class="register_form">
-                    <h3>Registerr</h3>
-                        <input v-model="username" id="register_user" class="register_user" type="text" placeholder="username">
-                        <input v-model="email" id="register_email" class="register_email" type="email">
-                        <input v-model="password" id="register_password" type="password"  placeholder=" password">
-                        <button @click="register" id="register_button" class="register_button" :disabled="registerPending">register</button>
-                        <p v-if="registerError" class="auth-error" role="alert" dir="rtl">{{ registerError }}</p>
-                        <p v-if="registerMessage" role="status" dir="rtl">{{ registerMessage }}</p>
+import { useAuthStore } from '../stores/auth'
 
-                </div>
-            </div>
+const auth = useAuthStore()
 
-    </template>
-    <script setup>
-    import { ref } from 'vue'
+// ورودی‌ها، پیام خطا و وضعیت ارسال فرم ورود
+const loginUsername = ref('')
+const loginPassword = ref('')
+const loginPending = ref(false)
+const loginError = ref('')
 
-    const loginUsername = ref('')
-    const loginPassword = ref('')
-    const loginPending = ref(false)
-    const loginError = ref('')
-    const username = ref('')
-    const email = ref('')
-    const password = ref('')
-    const registerPending = ref(false)
-    const registerError = ref('')
-    const registerMessage = ref('')
-    const emit = defineEmits(['login'])
+// وضعیت فرم ثبت‌نام مستقل از فرم ورود است.
+const registerUsername = ref('')
+const registerEmail = ref('')
+const registerPassword = ref('')
+const registerPending = ref(false)
+const registerError = ref('')
+const registerMessage = ref('')
 
-    async function sendRequest(path, details) {
-        const response = await fetch(path, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(details),
-        }).catch(() => null)
+// اعتبارسنجی ورودی‌ها، دریافت توکن و ذخیرهٔ آن برای درخواست‌های بعدی
+async function login() {
+  if (loginPending.value) return
 
-        if (!response) throw new Error('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.')
-        if (response.status === 404) throw new Error('مسیر درخواست روی سرور پیدا نشد.')
-        if (response.status === 429) throw new Error('تعداد درخواست‌ها زیاد است. کمی صبر کنید.')
-        if (response.status >= 500) throw new Error('سرور پاسخ درستی نداد. دوباره تلاش کنید.')
+  loginError.value = ''
+  const details = {
+    username: loginUsername.value.trim(),
+    password: loginPassword.value,
+  }
 
-        return response
-    }
+  if (!details.username || !details.password) {
+    loginError.value = 'نام کاربری و رمز عبور را وارد کنید.'
+    return
+  }
 
-    async function register() {
-        if (registerPending.value) return
-        registerError.value = ''
-        registerMessage.value = ''
-
-        const details = {
-            username: username.value.trim(),
-            email: email.value.trim(),
-            password: password.value,
-        }
-
-        if (!details.username || !details.email || !details.password) {
-            registerError.value = 'نام کاربری، ایمیل و رمز عبور را وارد کنید.'
-            return
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
-            registerError.value = 'ایمیل را به شکل درست وارد کنید.'
-            return
-        }
-
-        registerPending.value = true
-        try {
-            const response = await sendRequest('/accounts/register', details)
-            if (!response.ok) throw new Error('ثبت‌نام انجام نشد. دوباره تلاش کنید.')
-
-            username.value = ''
-            email.value = ''
-            password.value = ''
-            registerMessage.value = 'ثبت‌نام انجام شد. حالا می‌توانید وارد شوید.'
-        } catch (error) {
-            registerError.value = error.message
-        } finally {
-            registerPending.value = false
-        }
-    }
-
-    async function login() {
-        if (loginPending.value) return
-        loginError.value = ''
-
-        const details = { username: loginUsername.value.trim(), password: loginPassword.value }
-        if (!details.username || !details.password) {
-            loginError.value = 'نام کاربری و رمز عبور را وارد کنید.'
-            return
-        }
-
-        loginPending.value = true
-        try {
-            const response = await sendRequest('/accounts/login', details)
-            if ([400, 401, 403, 422].includes(response.status)) {
-                throw new Error('ورود پذیرفته نشد. نام کاربری و رمز عبور را بررسی کنید.')
-            }
-            const failedLogin = 'ورود انجام نشد. دوباره تلاش کنید.'
-            if (!response.ok) throw new Error(failedLogin)
-
-            const data = await response.json().catch(() => null)
-            if (typeof data?.token !== 'string' || !data.token.trim()) throw new Error(failedLogin)
-
-            try {
-                localStorage.setItem('userToken', data.token)
-            } catch {
-                throw new Error(failedLogin)
-            }
-            emit('login', data.token)
-        } catch (error) {
-            loginError.value = error.message
-        } finally {
-            loginPending.value = false
-        }
-    }
-    </script>
-
-    <style>
-body {
-
-    background-color: #FEF3E2;
-    margin: 0;
-    padding: 20px;
-    color: #ffffff;
-}
-    .Authentication{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    max-width: 900px;
-    margin: 0 auto 30px;
-    padding:8px;
-    background:#2A1A0E;
+  loginPending.value = true
+  try {
+    await auth.login(details)
+  } catch (error) {
+    loginError.value = error.message
+  } finally {
+    loginPending.value = false
+  }
 }
 
+// ساخت حساب؛ فرم فقط پس از پاسخ موفق پاک می‌شود.
+async function register() {
+  if (registerPending.value) return
 
-.Authentication .auth-error {
-    margin: 8px 0;
-    color: #ffb8b8;
+  registerError.value = ''
+  registerMessage.value = ''
+  const details = {
+    username: registerUsername.value.trim(),
+    email: registerEmail.value.trim(),
+    password: registerPassword.value,
+  }
+
+  if (!details.username || !details.email || !details.password) {
+    registerError.value = 'نام کاربری، ایمیل و رمز عبور را وارد کنید.'
+    return
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
+    registerError.value = 'ایمیل را به شکل درست وارد کنید.'
+    return
+  }
+
+  registerPending.value = true
+  try {
+    await auth.register(details)
+
+    registerUsername.value = ''
+    registerEmail.value = ''
+    registerPassword.value = ''
+    registerMessage.value = 'ثبت‌نام انجام شد. حالا می‌توانید وارد شوید.'
+  } catch (error) {
+    registerError.value = error.message
+  } finally {
+    registerPending.value = false
+  }
+}
+</script>
+
+<style scoped>
+.auth-forms {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto 30px;
+  padding: 8px;
+  background: #2a1a0e;
+  color: #fff;
 }
 
-    </style>
-
+.auth-error {
+  margin: 8px 0;
+  color: #ffb8b8;
+}
+</style>
