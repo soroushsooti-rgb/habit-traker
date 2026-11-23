@@ -45,7 +45,9 @@
       </div>
     </div>
 
-    <button id="create_habit_button" type="submit">Create habit</button>
+    <button id="create_habit_button" type="submit" :disabled="createPending">
+      {{ createPending ? 'Creating…' : 'Create habit' }}
+    </button>
     <p v-if="formError" class="habit-error" role="alert" dir="rtl">{{ formError }}</p>
   </form>
 
@@ -64,16 +66,25 @@
         <label>
           <input
             type="checkbox"
-            :checked="habitStore.isChecked(habit.id)"
-            :disabled="!checksReady"
-            @change="toggleCheck(habit.id, $event)"
+            :checked="pendingChecks.get(habit.id) ?? habitStore.isChecked(habit.id)"
+            :disabled="!checksReady || pendingChecks.has(habit.id)"
+            @change="toggleCheck(habit.id)"
           >
           {{ habit.name }}
         </label>
-        <button type="button" @click="deleteHabit(habit.id)">Delete</button>
+        <button type="button" @click="askToDelete(habit)" :disabled="deletePending">Delete</button>
       </li>
     </ul>
   </div>
+  <!-- حذف عادت فقط بعد از انتخاب «بله» انجام می‌شود. -->
+  <dialog ref="deleteDialog" class="delete-dialog" dir="rtl" aria-labelledby="delete-question" @close="habitToDelete = null">
+    <p id="delete-question">آیا از پاک کردن این عادت مطمئن هستید؟</p>
+    <p v-if="habitToDelete" class="delete-habit-name">{{ habitToDelete.name }}</p>
+    <div class="delete-actions">
+      <button type="button" autofocus @click="deleteDialog.close()">خیر</button>
+      <button type="button" @click="confirmDelete">بله</button>
+    </div>
+  </dialog>
 </template>
 
 <script setup>
@@ -92,7 +103,12 @@ const form = reactive({ ...formDefaults, frequency: 'DAILY' })
 // خطاها جدا نگه داشته می‌شوند تا هر پیام در بخش مربوط به خودش دیده شود.
 const logoutError = ref('')
 const formError = ref('')
+const createPending = ref(false)
 const listError = ref('')
+const deleteDialog = ref(null)
+const habitToDelete = ref(null)
+const deletePending = ref(false)
+const pendingChecks = reactive(new Map())
 
 // اعتبارسنجی فرم و ساخت دادهٔ مناسب برای دورهٔ روزانه، هفتگی یا ماهانه
 function habitDetails() {
@@ -119,36 +135,54 @@ function habitDetails() {
 
 // فرستادن عادت جدید به سرور و پاک کردن فیلدها پس از موفقیت
 async function createHabit() {
+  if (createPending.value) return
+
   formError.value = ''
+  createPending.value = true
   try {
     await habitStore.createHabit(habitDetails())
     Object.assign(form, formDefaults)
   } catch (error) {
     formError.value = error.message
+  } finally {
+    createPending.value = false
   }
 }
 
-async function deleteHabit(id) {
+function askToDelete(habit) {
+  habitToDelete.value = habit
+  deleteDialog.value.showModal()
+}
+
+async function confirmDelete() {
+  if (!deleteDialog.value.open || !habitToDelete.value || deletePending.value) return
+
+  const id = habitToDelete.value.id
+  deletePending.value = true
+  deleteDialog.value.close()
   listError.value = ''
   try {
     await habitStore.deleteHabit(id)
   } catch (error) {
     listError.value = error.message
+  } finally {
+    deletePending.value = false
   }
 }
 
-// در صورت وجود تیک آن را حذف می‌کنیم؛ در غیر این صورت تیک تازه می‌سازیم.
-async function toggleCheck(habitId, event) {
-  const checkbox = event.target
+// تا پایان درخواست، وضعیت موقت تیک را در Vue نگه می‌داریم.
+async function toggleCheck(habitId) {
+  if (!checksReady.value || pendingChecks.has(habitId)) return
 
+  pendingChecks.set(habitId, !habitStore.isChecked(habitId))
   listError.value = ''
   try {
     await habitStore.toggleCheck(habitId)
   } catch (error) {
     listError.value = error.message
   } finally {
-    // ظاهر چک‌باکس را با آخرین وضعیت دریافت‌شده از سرور هماهنگ نگه می‌داریم.
-    checkbox.checked = habitStore.isChecked(habitId)
+    // بعد از درخواست، چک‌باکس دوباره وضعیت تأییدشدهٔ Pinia را نشان می‌دهد.
+    pendingChecks.delete(habitId)
   }
 }
 
@@ -205,5 +239,38 @@ body {
 
 .logout-error {
   color: #9f2020;
+}
+
+.delete-dialog {
+  box-sizing: border-box;
+  width: min(340px, calc(100% - 32px));
+  padding: 20px;
+  border: 1px solid #d6c2ad;
+  border-radius: 8px;
+  color: #2a1a0e;
+  background: #fef3e2;
+}
+
+.delete-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.delete-dialog p {
+  margin: 0 0 10px;
+}
+
+.delete-habit-name {
+  overflow-wrap: anywhere;
+  font-weight: bold;
+}
+
+.delete-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.delete-actions button {
+  padding: 4px 12px;
 }
 </style>

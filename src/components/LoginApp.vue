@@ -3,6 +3,7 @@
     <!-- فرم ورود: دریافت نام کاربری و رمز عبور -->
     <form novalidate @submit.prevent="login">
       <h3>Login</h3>
+      <p v-if="auth.sessionNotice" class="auth-error" role="alert" dir="rtl">{{ auth.sessionNotice }}</p>
       <input v-model="loginUsername" id="user" type="text" placeholder="username" aria-label="Username" autocomplete="username" required>
       <input v-model="loginPassword" id="password" type="password" placeholder="password" aria-label="Password" autocomplete="current-password" required>
       <button id="login_button" type="submit" :disabled="loginPending">Login</button>

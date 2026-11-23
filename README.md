@@ -20,5 +20,10 @@ npm run build
 npm run lint
 ```
 
+### Runs regression tests (Node.js 20+)
+```
+npm test
+```
+
 ### Customize configuration
 See [Configuration Reference](https://cli.vuejs.org/config/).

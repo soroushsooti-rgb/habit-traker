@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(readStoredToken())
+  const sessionNotice = ref('')
   const isLoggedIn = computed(() => Boolean(token.value))
 
   function readStoredToken() {
@@ -46,6 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {
       throw new Error(failureMessage)
     }
+    sessionNotice.value = ''
     token.value = receivedToken
   }
 
@@ -54,22 +56,27 @@ export const useAuthStore = defineStore('auth', () => {
     if (!response.ok) throw new Error('ثبت‌نام انجام نشد. دوباره تلاش کنید.')
   }
 
+  function clearSession(notice = '') {
+    sessionNotice.value = notice
+    try {
+      localStorage.removeItem('userToken')
+    } finally {
+      token.value = ''
+    }
+  }
+
   async function logout() {
     const currentToken = token.value
+
+    // خروج محلی به در دسترس بودن سرور وابسته نیست.
+    clearSession()
     if (!currentToken) return
 
-    const response = await fetch('/accounts/logout', {
+    await fetch('/accounts/logout', {
       method: 'POST',
       headers: { Authorization: 'Token ' + currentToken },
     }).catch(() => null)
-
-    if (!response) throw new Error('ارتباط با سرور برقرار نشد.')
-    if (!response.ok && response.status !== 401) throw new Error('خروج انجام نشد.')
-    if (token.value !== currentToken) return
-
-    localStorage.removeItem('userToken')
-    token.value = ''
   }
 
-  return { token, isLoggedIn, login, register, logout }
+  return { token, isLoggedIn, sessionNotice, login, register, logout, clearSession }
 })

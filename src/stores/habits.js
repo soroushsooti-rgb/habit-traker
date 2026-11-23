@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useAuthStore } from './auth'
 import { defineStore } from 'pinia'
 
@@ -10,11 +10,15 @@ export const useHabitsStore = defineStore('habits', () => {
   const habitLoadError = ref('')
   const checkLoadError = ref('')
 
+  // تغییرات تأییدشده را تا دریافت فهرست تازه نگه می‌داریم.
+  const confirmedChecks = reactive(new Map())
+  let checksRequestId = 0
   let session = 0
   watch(() => auth.token, () => {
     session += 1
     habits.value = []
     checks.value = []
+    confirmedChecks.clear()
     checksReady.value = false
     habitLoadError.value = ''
     checkLoadError.value = ''
@@ -24,6 +28,7 @@ export const useHabitsStore = defineStore('habits', () => {
   const checksPath = '/habit/checks/'
 
   async function request(path, failureMessage, { method = 'GET', data } = {}) {
+    const requestSession = session
     const headers = { Authorization: `Token ${auth.token}` }
     if (data !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -35,7 +40,10 @@ export const useHabitsStore = defineStore('habits', () => {
 
     if (!response) throw new Error('ارتباط با سرور برقرار نشد.')
     if (response.status === 401) {
-      throw new Error('نشست شما معتبر نیست. دوباره وارد شوید.')
+      // پاسخ دیررس نشست قبلی نباید کاربر فعلی را خارج کند.
+      const message = 'نشست شما پایان یافته است. دوباره وارد شوید.'
+      if (requestSession === session) auth.clearSession(message)
+      throw new Error(message)
     }
     if (!response.ok) throw new Error(failureMessage)
 
@@ -66,18 +74,22 @@ export const useHabitsStore = defineStore('habits', () => {
   }
 
   // چک‌باکس‌ها پس از دریافت وضعیت تیک‌ها قابل تغییر می‌شوند.
-  async function loadChecks() {
+  async function loadChecks({ afterSave = false } = {}) {
     const currentSession = session
+    const requestId = ++checksRequestId
     checkLoadError.value = ''
     try {
       const records = await readList(checksPath, 'دریافت وضعیت تیک‌ها انجام نشد.')
-      if (currentSession !== session) return
+      if (currentSession !== session || requestId !== checksRequestId) return
       checks.value = records
+      confirmedChecks.clear()
       checksReady.value = true
     } catch (error) {
-      if (currentSession !== session) return
+      if (currentSession !== session || requestId !== checksRequestId) return
       checksReady.value = false
-      checkLoadError.value = error.message
+      checkLoadError.value = afterSave
+        ? 'تغییر تیک ذخیره شد، اما تازه‌سازی وضعیت تیک‌ها ناموفق بود.'
+        : error.message
     }
   }
 
@@ -101,7 +113,7 @@ export const useHabitsStore = defineStore('habits', () => {
   }
 
   function isChecked(habitId) {
-    return Boolean(findCheck(habitId))
+    return confirmedChecks.get(habitId) ?? Boolean(findCheck(habitId))
   }
 
   async function toggleCheck(habitId) {
@@ -115,7 +127,10 @@ export const useHabitsStore = defineStore('habits', () => {
         data: { habit: habitId },
       })
     }
-    if (currentSession === session) await loadChecks()
+    if (currentSession !== session) return
+
+    confirmedChecks.set(habitId, !existingCheck)
+    await loadChecks({ afterSave: true })
   }
 
   return {
